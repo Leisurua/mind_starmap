@@ -62,6 +62,13 @@ tour = createTourController({
   onFocusNode: (nodeId) => scene.focusOnNode(nodeId),
 });
 
+window.addEventListener('pagehide', (event) => {
+  if (!event.persisted) {
+    tour.stopTour();
+    scene.destroy();
+  }
+});
+
 const modals = createModals({
   getActiveUniverseId: () => activeUniverseId,
   getCurrentUniverse: () => currentUniverse,
@@ -91,13 +98,16 @@ function refreshScene() {
 }
 
 function switchUniverse(universeId, focusNodeId = null) {
+  const nextUniverse = getUniverse(universeId);
+  if (!nextUniverse) return;
   if (universeId === activeUniverseId && !focusNodeId) return;
   tour.stopTour();
+  if (universeId !== activeUniverseId) scene.clearSelection();
 
   activeUniverseId = universeId;
   setActiveUniverseId(universeId);
 
-  currentUniverse = getUniverse(universeId);
+  currentUniverse = nextUniverse;
   graphData = loadUniverseGraph(universeId);
 
   hud.setSubtitle(currentUniverse.subtitle || '');
@@ -120,6 +130,7 @@ function switchUniverse(universeId, focusNodeId = null) {
 }
 
 function jumpThroughWormhole(wh) {
+  if (!loadUniverseGraph(wh.targetUniverseId).nodes.some((node) => node.id === wh.targetNodeId)) return;
   hud.hideTooltip();
   warpFlashEl.classList.add('active');
   setTimeout(() => {

@@ -774,6 +774,32 @@ html, body {
   margin-bottom: 4px;
 }
 
+.review-error-box {
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(127, 29, 29, 0.45);
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  color: #fecaca;
+  font-size: 12px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.review-warning-box {
+  padding: 8px 11px;
+  border-radius: 10px;
+  background: rgba(120, 53, 15, 0.4);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #fde68a;
+  font-size: 11.5px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .review-list {
   display: flex;
   flex-direction: column;

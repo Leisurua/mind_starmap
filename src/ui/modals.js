@@ -1,8 +1,11 @@
 import { renderFormula } from './formula.js';
+import { escapeHtml } from './html.js';
+import { validateImportPayload } from '../schemas/graphSchema.ts';
 import {
-  applyGraphPatch,
+  commitGraphPatch,
+  getUniverse,
+  loadUniverseGraph,
   registerCustomUniverse,
-  saveUniverseGraph,
 } from '../state/universeStore.js';
 
 const SAMPLE_PATCH_JSON = {
@@ -45,8 +48,48 @@ export function createModals({
   const modalTitle = document.getElementById('modal-title');
   const modalForm = document.getElementById('modal-form');
   const btnCloseModal = document.getElementById('btn-close-modal');
+  const errorMarkup = '<div id="modal-errors" class="review-error-box hidden" role="alert"></div>';
+
+  function showErrors(errors) {
+    const box = modalForm.querySelector('#modal-errors');
+    const messages = errors.slice(0, 20);
+    if (errors.length > messages.length) messages.push(`另有 ${errors.length - messages.length} 项错误`);
+    box.replaceChildren(...messages.map((message) => {
+      const item = document.createElement('div');
+      item.textContent = message;
+      return item;
+    }));
+    box.classList.toggle('hidden', errors.length === 0);
+  }
+
+  function validate(payload) {
+    return validateImportPayload(payload, {
+      activeUniverseId: getActiveUniverseId(),
+      categories: getCurrentUniverse().categories,
+      graph: getGraphData(),
+      hasUniverse: (id) => Boolean(getUniverse(id)),
+      getUniverseNodes: (id) => getUniverse(id)
+        ? new Set(loadUniverseGraph(id).nodes.map((node) => node.id))
+        : undefined,
+    });
+  }
+
+  function finishPatch(payload) {
+    const result = validate(payload);
+    if (!result.ok) {
+      showErrors(result.errors);
+      return;
+    }
+    if (!commitGraphPatch(result.data.universeId, getGraphData(), result.data)) {
+      showErrors(['无法保存到浏览器本地存储，请检查存储权限或剩余空间后重试。']);
+      return;
+    }
+    closeModal();
+    onGraphMutated(result.data.nodes[0]?.id ?? null);
+  }
 
   function closeModal() {
+    modalForm.onsubmit = null;
     modalBoxEl.classList.remove('wide');
     modalOverlay.classList.add('hidden');
   }
@@ -59,13 +102,13 @@ export function createModals({
   function openAddNodeModal() {
     const u = getCurrentUniverse();
     const graphData = getGraphData();
-    modalTitle.textContent = `✦ 在「${u.shortName}」点亮新星`;
+    modalTitle.textContent = `✦ 在「${u.shortName || u.name}」点亮新星`;
 
     const catOptions = Object.values(u.categories)
-      .map((c) => `<option value="${c.id}">${c.name} (${c.en})</option>`)
+      .map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)} (${escapeHtml(c.en)})</option>`)
       .join('');
     const nodeOptions = graphData.nodes
-      .map((n) => `<option value="${n.id}">${n.name}</option>`)
+      .map((n) => `<option value="${escapeHtml(n.id)}">${escapeHtml(n.name)}</option>`)
       .join('');
 
     modalForm.innerHTML = `
@@ -100,6 +143,7 @@ export function createModals({
         <label>星轨关系说明 (若选择关联)</label>
         <input name="relation" placeholder="例如：非负约束对比 / 降维分支" />
       </div>
+      ${errorMarkup}
       <div class="modal-actions">
         <button type="button" class="hud-btn" id="modal-cancel">取消</button>
         <button type="submit" class="btn-submit">点亮星辰</button>
@@ -120,21 +164,17 @@ export function createModals({
         summary: fd.get('summary').trim(),
         points: [fd.get('summary').trim()],
       };
-      graphData.nodes.push(newNode);
-
       const connectTo = fd.get('connectTo');
-      if (connectTo) {
-        graphData.links.push({
+      finishPatch({
+        universeId: u.id,
+        nodes: [newNode],
+        links: connectTo ? [{
           source: connectTo,
           target: id,
           relation: fd.get('relation').trim() || '知识关联',
           description: `由该知识点延伸或关联至 ${newNode.name}。`,
-        });
-      }
-
-      saveUniverseGraph(getActiveUniverseId(), graphData);
-      closeModal();
-      onGraphMutated(id);
+        }] : [],
+      });
     };
 
     modalOverlay.classList.remove('hidden');
@@ -143,9 +183,9 @@ export function createModals({
   function openAddLinkModal() {
     const u = getCurrentUniverse();
     const graphData = getGraphData();
-    modalTitle.textContent = `☍ 在「${u.shortName}」串联有向星轨`;
+    modalTitle.textContent = `☍ 在「${u.shortName || u.name}」串联有向星轨`;
     const nodeOptions = graphData.nodes
-      .map((n) => `<option value="${n.id}">${n.name}</option>`)
+      .map((n) => `<option value="${escapeHtml(n.id)}">${escapeHtml(n.name)}</option>`)
       .join('');
 
     modalForm.innerHTML = `
@@ -165,6 +205,7 @@ export function createModals({
         <label>关系详细解释 *</label>
         <textarea name="description" rows="3" required placeholder="描述起点知识点如何推导出、作用于或演进到终点知识点..."></textarea>
       </div>
+      ${errorMarkup}
       <div class="modal-actions">
         <button type="button" class="hud-btn" id="modal-cancel">取消</button>
         <button type="submit" class="btn-submit">建立有向星轨</button>
@@ -180,21 +221,15 @@ export function createModals({
       const fd = new FormData(modalForm);
       const source = fd.get('source');
       const target = fd.get('target');
-      if (source === target) {
-        alert('请选择两颗不同的星星进行串联。');
-        return;
-      }
-
-      graphData.links.push({
-        source,
-        target,
-        relation: fd.get('relation').trim(),
-        description: fd.get('description').trim(),
+      finishPatch({
+        universeId: u.id,
+        links: [{
+          source,
+          target,
+          relation: fd.get('relation').trim(),
+          description: fd.get('description').trim(),
+        }],
       });
-
-      saveUniverseGraph(getActiveUniverseId(), graphData);
-      closeModal();
-      onGraphMutated(null);
     };
 
     modalOverlay.classList.remove('hidden');
@@ -202,10 +237,7 @@ export function createModals({
 
   function renderPatchReview(patch) {
     const u = getCurrentUniverse();
-    const graphData = getGraphData();
-    const nodes = patch.nodes || [];
-    const links = patch.links || [];
-    const wormholes = patch.wormholes || [];
+    const { nodes, links, wormholes } = patch;
 
     const nodesHtml = nodes
       .map(
@@ -213,9 +245,9 @@ export function createModals({
       <label class="review-item">
         <input type="checkbox" name="rev-node" value="${i}" checked />
         <div class="review-item-body">
-          <div class="review-item-title">${n.name} <span style="color:#64748b;font-weight:400;">(${n.en || ''})</span></div>
+          <div class="review-item-title">${escapeHtml(n.name)} <span style="color:#64748b;font-weight:400;">(${escapeHtml(n.en || '')})</span></div>
           ${n.formula ? `<div class="tooltip-formula" style="margin:2px 0;">${renderFormula(n.formula, false)}</div>` : ''}
-          <div class="review-item-desc">${n.summary}</div>
+          <div class="review-item-desc">${escapeHtml(n.summary)}</div>
         </div>
       </label>
     `
@@ -228,8 +260,8 @@ export function createModals({
       <label class="review-item">
         <input type="checkbox" name="rev-link" value="${i}" checked />
         <div class="review-item-body">
-          <div class="review-item-title">${l.source} → ${l.target} <span class="link-card-rel">${l.relation}</span></div>
-          <div class="review-item-desc">${l.description}</div>
+          <div class="review-item-title">${escapeHtml(l.source)} → ${escapeHtml(l.target)} <span class="link-card-rel">${escapeHtml(l.relation)}</span></div>
+          <div class="review-item-desc">${escapeHtml(l.description)}</div>
         </div>
       </label>
     `
@@ -242,19 +274,20 @@ export function createModals({
       <label class="review-item">
         <input type="checkbox" name="rev-wh" value="${i}" checked />
         <div class="review-item-body">
-          <div class="review-item-title">🌀 ${w.anchorNodeId} ⟶ ${w.targetUniverseId} (${w.targetNodeId})</div>
-          <div class="review-item-desc">${w.description}</div>
+          <div class="review-item-title">🌀 ${escapeHtml(w.anchorNodeId)} ⟶ ${escapeHtml(w.targetUniverseId)} (${escapeHtml(w.targetNodeId)})</div>
+          <div class="review-item-desc">${escapeHtml(w.description)}</div>
         </div>
       </label>
     `
       )
       .join('');
 
-    modalTitle.textContent = `🔍 审核待合入知识点 · 目标宇宙「${u.shortName}」`;
+    modalTitle.textContent = `🔍 审核待合入知识点 · 目标宇宙「${u.shortName || u.name}」`;
     modalForm.innerHTML = `
       ${nodes.length ? `<div class="review-section-title">新增知识点星星 (${nodes.length})</div><div class="review-list">${nodesHtml}</div>` : ''}
       ${links.length ? `<div class="review-section-title">新增有向星轨 (${links.length})</div><div class="review-list">${linksHtml}</div>` : ''}
       ${wormholes.length ? `<div class="review-section-title">新增跨宇宙虫洞 (${wormholes.length})</div><div class="review-list">${whHtml}</div>` : ''}
+      ${errorMarkup}
       <div class="modal-actions">
         <button type="button" class="hud-btn" id="modal-cancel">取消</button>
         <button type="button" class="btn-submit" id="btn-confirm-patch">✓ 确认并合入有向星图</button>
@@ -273,31 +306,26 @@ export function createModals({
         (cb) => wormholes[Number(cb.value)]
       );
 
-      const firstAddedId = applyGraphPatch(graphData, {
+      finishPatch({
+        universeId: patch.universeId,
         nodes: approvedNodes,
         links: approvedLinks,
         wormholes: approvedWh,
       });
-
-      saveUniverseGraph(getActiveUniverseId(), graphData);
-      closeModal();
-      onGraphMutated(firstAddedId);
     });
   }
 
   function renderUniverseReview(u) {
-    const nodes = u.nodes || [];
-    const links = u.links || [];
-    const tour = u.tour || [];
+    const { nodes, links, tour } = u;
 
     modalTitle.textContent = `🌌 审核新平行宇宙：${u.name || u.shortName}`;
     modalForm.innerHTML = `
       <div class="review-item" style="cursor:default;">
         <div class="review-item-body">
-          <div class="review-item-title">${u.icon || '✦'} ${u.name}</div>
-          <div class="review-item-desc">${u.subtitle || ''}</div>
+          <div class="review-item-title">${escapeHtml(u.icon || '✦')} ${escapeHtml(u.name)}</div>
+          <div class="review-item-desc">${escapeHtml(u.subtitle || '')}</div>
           <div class="review-item-desc" style="color:#7dd3fc;margin-top:4px;">
-            包含 ${nodes.length} 颗知识星 · ${links.length} 条有向星轨 · ${(u.wormholes || []).length} 个虫洞 · ${tour.length || Math.min(nodes.length, 10)} 步导览路线
+            包含 ${nodes.length} 颗知识星 · ${links.length} 条有向星轨 · ${u.wormholes.length} 个虫洞 · ${tour.length || Math.min(nodes.length, 10)} 步导览路线
           </div>
         </div>
       </div>
@@ -308,15 +336,16 @@ export function createModals({
             (n) => `
           <div class="review-item" style="cursor:default;">
             <div class="review-item-body">
-              <div class="review-item-title">${n.name}</div>
+              <div class="review-item-title">${escapeHtml(n.name)}</div>
               ${n.formula ? `<div class="tooltip-formula" style="margin:2px 0;">${renderFormula(n.formula, false)}</div>` : ''}
-              <div class="review-item-desc">${n.summary}</div>
+              <div class="review-item-desc">${escapeHtml(n.summary)}</div>
             </div>
           </div>
         `
           )
           .join('')}
       </div>
+      ${errorMarkup}
       <div class="modal-actions">
         <button type="button" class="hud-btn" id="modal-cancel">取消</button>
         <button type="button" class="btn-submit" id="btn-confirm-universe">🚀 创建宇宙并开始「带我看」</button>
@@ -325,13 +354,22 @@ export function createModals({
 
     modalForm.querySelector('#modal-cancel').addEventListener('click', closeModal);
     modalForm.querySelector('#btn-confirm-universe').addEventListener('click', () => {
-      registerCustomUniverse(u);
+      const result = validate({ mode: 'universe', universe: u });
+      if (!result.ok) {
+        showErrors(result.errors);
+        return;
+      }
+      if (!registerCustomUniverse(result.data)) {
+        showErrors(['无法保存新宇宙。请检查宇宙 ID 是否已存在，以及浏览器存储是否可用。']);
+        return;
+      }
       closeModal();
-      onUniverseCreated(u);
+      onUniverseCreated(result.data);
     });
   }
 
   function openAiImportModal() {
+    modalForm.onsubmit = (e) => e.preventDefault();
     modalBoxEl.classList.add('wide');
     modalTitle.textContent = '✨ AI 笔记整理 / 文献星图 · 审核导入';
 
@@ -340,6 +378,7 @@ export function createModals({
         <label>粘贴 AI 按 <code>starlink-constellation</code> Skill 生成的 JSON（支持「笔记增量补丁」或「整篇 PPT/PDF/论文新宇宙」）</label>
         <textarea id="ai-json-input" rows="7" placeholder='{"mode": "patch" | "universe", ...}'></textarea>
       </div>
+      ${errorMarkup}
       <div class="modal-actions" style="justify-content: space-between;">
         <button type="button" class="hud-btn" id="btn-load-sample">加载示例笔记补丁</button>
         <div style="display:flex; gap:8px;">
@@ -351,27 +390,36 @@ export function createModals({
 
     modalForm.querySelector('#modal-cancel').addEventListener('click', closeModal);
     modalForm.querySelector('#btn-load-sample').addEventListener('click', () => {
+      showErrors([]);
       modalForm.querySelector('#ai-json-input').value = JSON.stringify(SAMPLE_PATCH_JSON, null, 2);
     });
 
     modalForm.querySelector('#btn-parse-review').addEventListener('click', () => {
+      showErrors([]);
       const rawText = modalForm.querySelector('#ai-json-input').value.trim();
-      if (!rawText) return;
+      if (!rawText) {
+        showErrors(['请先粘贴 JSON 内容']);
+        return;
+      }
 
       let payload;
       try {
         payload = JSON.parse(rawText);
       } catch (err) {
-        alert('JSON 格式有误，请检查括号与转义字符：' + err.message);
+        showErrors([`JSON 语法解析失败：${err.message}`]);
         return;
       }
 
-      if (payload.mode === 'universe' && payload.universe) {
-        renderUniverseReview(payload.universe);
-      } else if (Array.isArray(payload.nodes) || Array.isArray(payload.links)) {
-        renderPatchReview(payload);
+      const result = validate(payload);
+      if (!result.ok) {
+        showErrors(result.errors);
+        return;
+      }
+
+      if (result.mode === 'universe') {
+        renderUniverseReview(result.data);
       } else {
-        alert('未识别的 STARLINK 数据格式，请确保包含 mode: "patch" 或 mode: "universe"。');
+        renderPatchReview(result.data);
       }
     });
 

@@ -1,4 +1,5 @@
 import katex from 'katex';
+import { escapeHtml } from './html.js';
 
 export function renderFormula(tex, displayMode = false) {
   if (!tex) return '';
@@ -7,8 +8,9 @@ export function renderFormula(tex, displayMode = false) {
       displayMode,
       throwOnError: false,
       strict: false,
+      trust: false,
     });
   } catch {
-    return tex;
+    return escapeHtml(tex);
   }
 }

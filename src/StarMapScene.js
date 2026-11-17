@@ -119,6 +119,15 @@ export class StarMapScene {
 
     this.raycaster = new THREE.Raycaster();
     this.raycaster.params.Line.threshold = 1.65;
+    this.needsRaycast = false;
+    this.pointerInside = false;
+    this.pointerMoved = false;
+    this._rafId = null;
+
+    this._onCameraChange = () => {
+      this.needsRaycast = true;
+    };
+    this.controls.addEventListener('change', this._onCameraChange);
 
     this.graphGroup = new THREE.Group();
     this.scene.add(this.graphGroup);
@@ -126,6 +135,28 @@ export class StarMapScene {
     this.nodeHitMeshes = [];
     this.edgeLines = [];
     this.wormholeHitMeshes = [];
+  }
+
+  _disposeGraphObjects() {
+    const geometries = new Set();
+    const materials = new Set();
+    this.graphGroup.traverse((obj) => {
+      if (obj.geometry) geometries.add(obj.geometry);
+      if (obj.material) {
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach((m) => materials.add(m));
+        } else {
+          materials.add(obj.material);
+        }
+      }
+    });
+    geometries.forEach((g) => g.dispose());
+    materials.forEach((m) => m.dispose());
+
+    while (this.graphGroup.children.length > 0) {
+      this.graphGroup.remove(this.graphGroup.children[0]);
+    }
+    this.labelRenderer.domElement.innerHTML = '';
   }
 
   _initBackgroundCosmos() {
@@ -174,7 +205,7 @@ export class StarMapScene {
 
   setGraphData(rawNodes, rawLinks, categories = CATEGORIES, anchors = null, wormholes = []) {
     this.categories = categories || CATEGORIES;
-    this.clusterAnchors = {};
+    this.clusterAnchors = Object.create(null);
     if (anchors) {
       for (const [k, arr] of Object.entries(anchors)) {
         this.clusterAnchors[k] = new THREE.Vector3(arr[0], arr[1], arr[2]);
@@ -189,12 +220,8 @@ export class StarMapScene {
       prevPositions.set(n.id, n.pos.clone());
     }
 
-    // Clear previous 3D objects
-    while (this.graphGroup.children.length > 0) {
-      const child = this.graphGroup.children[0];
-      this.graphGroup.remove(child);
-    }
-    this.labelRenderer.domElement.innerHTML = '';
+    // Dispose and clear previous 3D objects to prevent GPU memory leaks
+    this._disposeGraphObjects();
 
     this.nodes = [];
     this.edges = [];
@@ -217,7 +244,7 @@ export class StarMapScene {
     // Build nodes
     rawNodes.forEach((raw, idx) => {
       const degree = degreeMap.get(raw.id) || 0;
-      const cat = this.categories[raw.category] || fallbackCat;
+      const cat = Object.hasOwn(this.categories, raw.category) ? this.categories[raw.category] : fallbackCat;
       const color = new THREE.Color(cat.color);
       const anchor = this.clusterAnchors[raw.category] || new THREE.Vector3();
 
@@ -465,12 +492,15 @@ export class StarMapScene {
       const hitGeo = new THREE.SphereGeometry(2.7, 14, 14);
       const hitMat = new THREE.MeshBasicMaterial({ visible: false });
       const hitMesh = new THREE.Mesh(hitGeo, hitMat);
-      whGroup.add(hitMesh);
+      this.graphGroup.add(hitMesh);
 
       // 6. CSS2D Wormhole Label
       const labelEl = document.createElement('div');
       labelEl.className = 'wormhole-label';
-      labelEl.innerHTML = `<span class="wh-icon">🌀</span> 虫洞 → ${whRaw.targetLabel || whRaw.targetUniverseId}`;
+      const icon = document.createElement('span');
+      icon.className = 'wh-icon';
+      icon.textContent = '🌀';
+      labelEl.append(icon, ` 虫洞 → ${whRaw.targetLabel || whRaw.targetUniverseId}`);
       const labelObj = new CSS2DObject(labelEl);
       labelObj.position.set(0, -2.6, 0);
       whGroup.add(labelObj);
@@ -517,7 +547,13 @@ export class StarMapScene {
       this._stepPhysics(0.016);
     }
     this._syncPositions();
+    this._clearHover();
+    if (this.selectedNode) {
+      this.selectedNode = this.nodeMap.get(this.selectedNode.id) ?? null;
+      this.callbacks.onSelectNode(this.selectedNode);
+    }
     this._applyVisualStates();
+    this.needsRaycast = true;
   }
 
   _stepPhysics(dt) {
@@ -630,6 +666,7 @@ export class StarMapScene {
       radialDir.normalize();
       wh.pos.copy(wh.anchorNode.pos).addScaledVector(radialDir, 9.5);
       wh.group.position.copy(wh.pos);
+      wh.hitMesh.position.copy(wh.pos);
 
       const tAttr = wh.tetherGeo.getAttribute('position');
       tAttr.setXYZ(0, wh.anchorNode.pos.x, wh.anchorNode.pos.y, wh.anchorNode.pos.z);
@@ -739,23 +776,32 @@ export class StarMapScene {
   }
 
   _performRaycast() {
-    if (this.pointer.x < -1 || this.pointer.x > 1) return;
+    const pointerMoved = this.pointerMoved;
+    this.pointerMoved = false;
+    this.needsRaycast = false;
+    if (!this.pointerInside) {
+      if (this._clearHover()) this._applyVisualStates();
+      return;
+    }
 
+    this.camera.updateMatrixWorld();
+    this.graphGroup.updateMatrixWorld();
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
     // 0. Check wormholes first
     const whHits = this.raycaster.intersectObjects(this.wormholeHitMeshes, false);
     if (whHits.length > 0) {
       const hitWh = whHits[0].object.userData.wormhole;
-      if (this.hoveredWormhole !== hitWh || this.hoveredNode !== null || this.hoveredEdge !== null) {
+      const changed = this.hoveredWormhole !== hitWh;
+      if (changed) {
         this.hoveredWormhole = hitWh;
         this.hoveredNode = null;
         this.hoveredEdge = null;
         this.container.classList.add('pointer-cursor');
         this._applyVisualStates();
       }
-      if (this.callbacks.onHoverWormhole) {
-        this.callbacks.onHoverWormhole(hitWh, this.pointerScreen);
+      if (changed || pointerMoved) {
+        this.callbacks.onHoverWormhole?.(hitWh, this.pointerScreen);
       }
       return;
     }
@@ -764,14 +810,15 @@ export class StarMapScene {
     const nodeHits = this.raycaster.intersectObjects(this.nodeHitMeshes, false);
     if (nodeHits.length > 0) {
       const hitNode = nodeHits[0].object.userData.node;
-      if (this.hoveredNode !== hitNode || this.hoveredEdge !== null || this.hoveredWormhole !== null) {
+      const changed = this.hoveredNode !== hitNode;
+      if (changed) {
         this.hoveredNode = hitNode;
         this.hoveredEdge = null;
         this.hoveredWormhole = null;
         this.container.classList.add('pointer-cursor');
         this._applyVisualStates();
       }
-      this.callbacks.onHoverNode(hitNode, this.pointerScreen);
+      if (changed || pointerMoved) this.callbacks.onHoverNode(hitNode, this.pointerScreen);
       return;
     }
 
@@ -779,26 +826,29 @@ export class StarMapScene {
     const edgeHits = this.raycaster.intersectObjects(this.edgeLines, false);
     if (edgeHits.length > 0) {
       const hitEdge = edgeHits[0].object.userData.edge;
-      if (this.hoveredEdge !== hitEdge || this.hoveredNode !== null || this.hoveredWormhole !== null) {
+      const changed = this.hoveredEdge !== hitEdge;
+      if (changed) {
         this.hoveredEdge = hitEdge;
         this.hoveredNode = null;
         this.hoveredWormhole = null;
         this.container.classList.add('pointer-cursor');
         this._applyVisualStates();
       }
-      this.callbacks.onHoverEdge(hitEdge, this.pointerScreen);
+      if (changed || pointerMoved) this.callbacks.onHoverEdge(hitEdge, this.pointerScreen);
       return;
     }
 
-    // 3. Clear hover
-    if (this.hoveredNode !== null || this.hoveredEdge !== null || this.hoveredWormhole !== null) {
-      this.hoveredNode = null;
-      this.hoveredEdge = null;
-      this.hoveredWormhole = null;
-      this.container.classList.remove('pointer-cursor');
-      this._applyVisualStates();
-      this.callbacks.onHoverClear();
-    }
+    if (this._clearHover()) this._applyVisualStates();
+  }
+
+  _clearHover() {
+    if (!this.hoveredNode && !this.hoveredEdge && !this.hoveredWormhole) return false;
+    this.hoveredNode = null;
+    this.hoveredEdge = null;
+    this.hoveredWormhole = null;
+    this.container.classList.remove('pointer-cursor');
+    this.callbacks.onHoverClear();
+    return true;
   }
 
   focusOnNode(nodeId) {
@@ -856,13 +906,20 @@ export class StarMapScene {
 
   _bindEvents() {
     const dom = this.renderer.domElement;
+    this._eventController = new AbortController();
+    const options = { signal: this._eventController.signal };
 
-    dom.addEventListener('pointermove', (e) => {
+    const updatePointer = (x, y) => {
       const rect = dom.getBoundingClientRect();
-      this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      this.pointerScreen = { x: e.clientX, y: e.clientY };
-    });
+      this.pointerScreen = { x, y };
+      const u = (x - rect.left) / rect.width;
+      const v = (y - rect.top) / rect.height;
+      this.pointerInside = u >= 0 && u <= 1 && v >= 0 && v <= 1;
+      this.pointer.set(u * 2 - 1, 1 - v * 2);
+      this.needsRaycast = true;
+      this.pointerMoved = true;
+    };
+    dom.addEventListener('pointermove', (e) => updatePointer(e.clientX, e.clientY), options);
 
     dom.addEventListener('pointerdown', (e) => {
       this.isPointerDown = true;
@@ -870,7 +927,7 @@ export class StarMapScene {
       // Cancel fly-to if user grabs camera
       this.cameraFlyTarget = null;
       this.cameraFlyPos = null;
-    });
+    }, options);
 
     dom.addEventListener('pointerup', (e) => {
       if (!this.isPointerDown) return;
@@ -880,6 +937,8 @@ export class StarMapScene {
       const moved = Math.hypot(dx, dy);
 
       if (moved < 5) {
+        updatePointer(e.clientX, e.clientY);
+        this._performRaycast();
         if (this.hoveredWormhole && this.callbacks.onClickWormhole) {
           this.callbacks.onClickWormhole(this.hoveredWormhole);
         } else if (this.hoveredNode) {
@@ -888,16 +947,15 @@ export class StarMapScene {
           this.clearSelection();
         }
       }
-    });
+    }, options);
 
-    dom.addEventListener('pointerleave', () => {
-      this.pointer.set(-999, -999);
-      this.hoveredNode = null;
-      this.hoveredEdge = null;
-      this.hoveredWormhole = null;
-      this._applyVisualStates();
-      this.callbacks.onHoverClear();
-    });
+    const leave = () => {
+      this.isPointerDown = false;
+      this.pointerInside = false;
+      if (this._clearHover()) this._applyVisualStates();
+    };
+    dom.addEventListener('pointerleave', leave, options);
+    dom.addEventListener('pointercancel', leave, options);
 
     window.addEventListener('resize', () => {
       const width = this.container.clientWidth || window.innerWidth;
@@ -907,16 +965,41 @@ export class StarMapScene {
       this.renderer.setSize(width, height);
       this.labelRenderer.setSize(width, height);
       this.composer.setSize(width, height);
-    });
+      if (this.pointerInside) {
+        updatePointer(this.pointerScreen.x, this.pointerScreen.y);
+        if (!this.pointerInside) leave();
+      }
+    }, options);
+  }
+
+  destroy() {
+    if (this._rafId === null) return;
+    cancelAnimationFrame(this._rafId);
+    this._rafId = null;
+    this._eventController.abort();
+    this._disposeGraphObjects();
+    if (this.bgStars) {
+      this.bgStars.geometry.dispose();
+      this.bgStars.material.dispose();
+    }
+    this.glowTexture.dispose();
+    this.controls.removeEventListener('change', this._onCameraChange);
+    this.controls.dispose();
+    this.bloomPass.dispose();
+    this.composer.dispose();
+    this.renderer.dispose();
+    this.renderer.domElement.remove();
+    this.labelRenderer.domElement.remove();
   }
 
   _animate() {
-    requestAnimationFrame(() => this._animate());
+    this._rafId = requestAnimationFrame(() => this._animate());
     const elapsed = this.clock.getElapsedTime();
 
     if (this.physicsEnabled) {
       this._stepPhysics(0.016);
       this._syncPositions();
+      this.needsRaycast = true;
     }
 
     // Subtle star twinkle
@@ -942,7 +1025,7 @@ export class StarMapScene {
       wh.vortexPoints.rotation.z -= 0.025 * speed;
 
       const targetScale = isHovered ? 1.24 : 1.0 + Math.sin(elapsed * 2.2 + wh.phase) * 0.05;
-      wh.group.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.14);
+      wh.group.scale.setScalar(THREE.MathUtils.lerp(wh.group.scale.x, targetScale, 0.14));
       wh.labelEl.classList.toggle('highlighted', isHovered);
     }
 
@@ -955,6 +1038,7 @@ export class StarMapScene {
     if (this.cameraFlyTarget && this.cameraFlyPos) {
       this.controls.target.lerp(this.cameraFlyTarget, 0.08);
       this.camera.position.lerp(this.cameraFlyPos, 0.08);
+      this.needsRaycast = true;
       if (this.camera.position.distanceTo(this.cameraFlyPos) < 0.35) {
         this.cameraFlyTarget = null;
         this.cameraFlyPos = null;
@@ -962,7 +1046,9 @@ export class StarMapScene {
     }
 
     this.controls.update();
-    this._performRaycast();
+    if (this.needsRaycast && this.pointerInside) {
+      this._performRaycast();
+    }
 
     this.composer.render();
     this.labelRenderer.render(this.scene, this.camera);

@@ -1,4 +1,5 @@
 import { renderFormula } from './formula.js';
+import { escapeHtml } from './html.js';
 import { getAllUniverses, getUniverse, loadUniverseGraph } from '../state/universeStore.js';
 
 export function createHud({
@@ -20,7 +21,7 @@ export function createHud({
 
   function getCategory(catId) {
     const cats = getCurrentUniverse().categories;
-    return cats[catId] || Object.values(cats)[0];
+    return Object.hasOwn(cats, catId) ? cats[catId] : Object.values(cats)[0];
   }
 
   function updateStats() {
@@ -48,14 +49,14 @@ export function createHud({
   function showNodeTooltip(node, screenPos) {
     const cat = getCategory(node.category);
     tooltipEl.innerHTML = `
-      <div class="tooltip-tag" style="color: ${cat.color}; border: 1px solid ${cat.color}55;">
-        <span class="cluster-dot" style="--chip-color: ${cat.color}"></span>
-        ${cat.name}
+      <div class="tooltip-tag" style="color: ${escapeHtml(cat.color)}; border: 1px solid ${escapeHtml(cat.color)}55;">
+        <span class="cluster-dot" style="--chip-color: ${escapeHtml(cat.color)}"></span>
+        ${escapeHtml(cat.name)}
       </div>
-      <div class="tooltip-title">${node.name}</div>
-      <div class="tooltip-sub">${node.en}</div>
+      <div class="tooltip-title">${escapeHtml(node.name)}</div>
+      <div class="tooltip-sub">${escapeHtml(node.en)}</div>
       ${node.formula ? `<div class="tooltip-formula">${renderFormula(node.formula, false)}</div>` : ''}
-      <div class="tooltip-desc">${node.summary}</div>
+      <div class="tooltip-desc">${escapeHtml(node.summary)}</div>
       <div class="tooltip-footer">前置来源 ${node.inDegree} · 后续延伸 ${node.outDegree} · 点击聚焦</div>
     `;
     tooltipEl.classList.remove('hidden');
@@ -67,14 +68,14 @@ export function createHud({
     const tgtCat = getCategory(edge.targetNode.category);
     tooltipEl.innerHTML = `
       <div class="tooltip-tag" style="color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.4);">
-        ✦ 有向星轨 · ${edge.relation}
+        ✦ 有向星轨 · ${escapeHtml(edge.relation)}
       </div>
       <div class="tooltip-edge-pair">
-        <span style="color: ${srcCat.color}">${edge.sourceNode.name}</span>
+        <span style="color: ${escapeHtml(srcCat.color)}">${escapeHtml(edge.sourceNode.name)}</span>
         <span class="tooltip-edge-arrow">→</span>
-        <span style="color: ${tgtCat.color}">${edge.targetNode.name}</span>
+        <span style="color: ${escapeHtml(tgtCat.color)}">${escapeHtml(edge.targetNode.name)}</span>
       </div>
-      <div class="tooltip-desc">${edge.description}</div>
+      <div class="tooltip-desc">${escapeHtml(edge.description)}</div>
     `;
     tooltipEl.classList.remove('hidden');
     positionTooltip(screenPos);
@@ -87,11 +88,11 @@ export function createHud({
         🌀 时空虫洞 · 跨宇宙跃迁
       </div>
       <div class="tooltip-edge-pair">
-        <span>${wh.anchorNode.name}</span>
+        <span>${escapeHtml(wh.anchorNode.name)}</span>
         <span class="tooltip-edge-arrow">⟶</span>
-        <span style="color: #7dd3fc">${targetU ? targetU.shortName : wh.targetUniverseId}</span>
+        <span style="color: #7dd3fc">${escapeHtml(targetU?.shortName || targetU?.name || wh.targetUniverseId)}</span>
       </div>
-      <div class="tooltip-desc">${wh.description}</div>
+      <div class="tooltip-desc">${escapeHtml(wh.description)}</div>
       <div class="tooltip-footer">点击虫洞，立即穿越至目标平行宇宙</div>
     `;
     tooltipEl.classList.remove('hidden');
@@ -162,12 +163,12 @@ export function createHud({
           <div class="link-card-top">
             <span class="link-card-target">
               <span class="link-dir-arrow">${dirSymbol}</span>
-              <span class="cluster-dot" style="--chip-color: ${otherCat.color}"></span>
-              ${otherNode.name}
+              <span class="cluster-dot" style="--chip-color: ${escapeHtml(otherCat.color)}"></span>
+              ${escapeHtml(otherNode.name)}
             </span>
-            <span class="link-card-rel">${link.relation}</span>
+            <span class="link-card-rel">${escapeHtml(link.relation)}</span>
           </div>
-          <div class="link-card-desc">${link.description}</div>
+          <div class="link-card-desc">${escapeHtml(link.description)}</div>
         `;
         card.addEventListener('click', () => onFocusNode(otherNode.id));
         linksContainer.appendChild(card);
@@ -194,10 +195,10 @@ export function createHud({
           <div class="link-card-top">
             <span class="link-card-target">
               <span>🌀</span>
-              <span>跃迁至：${targetU ? targetU.name : wh.targetUniverseId}</span>
+              <span>跃迁至：${escapeHtml(targetU ? targetU.name : wh.targetUniverseId)}</span>
             </span>
           </div>
-          <div class="link-card-desc">${wh.description}</div>
+          <div class="link-card-desc">${escapeHtml(wh.description)}</div>
         `;
         whCard.addEventListener('click', () => onJumpWormhole(wh));
         linksContainer.appendChild(whCard);
@@ -218,9 +219,9 @@ export function createHud({
       btn.dataset.universe = u.id;
       btn.title = u.name;
       btn.innerHTML = `
-        <span class="universe-item-icon">${u.icon || '✦'}</span>
+        <span class="universe-item-icon">${escapeHtml(u.icon || '✦')}</span>
         <div class="universe-item-info">
-          <div class="universe-item-name">${u.shortName || u.name}</div>
+          <div class="universe-item-name">${escapeHtml(u.shortName || u.name)}</div>
           <div class="universe-item-meta">${data.nodes.length} 星 · ${data.links.length} 轨</div>
         </div>
       `;
@@ -242,7 +243,7 @@ export function createHud({
       const chip = document.createElement('button');
       chip.className = 'cluster-chip';
       chip.style.setProperty('--chip-color', cat.color);
-      chip.innerHTML = `<span class="cluster-dot"></span> ${cat.name}`;
+      chip.innerHTML = `<span class="cluster-dot"></span> ${escapeHtml(cat.name)}`;
       chip.dataset.cat = cat.id;
       clusterFiltersEl.appendChild(chip);
     });
