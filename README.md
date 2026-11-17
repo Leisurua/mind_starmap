@@ -67,3 +67,7 @@ mind_starmap/
 │   └── data/                 # 通用起点模板与自定义平行宇宙挂载点
 └── index.html
 ```
+
+## 许可证
+
+本项目采用 [MIT 许可证](LICENSE)。

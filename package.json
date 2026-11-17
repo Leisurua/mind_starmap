@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "keywords": [],
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "katex": "^0.19.1",
