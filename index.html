@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>STARLINK · 3D 知识星图</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <!-- Top-left Brand & Search Bar -->
+  <header class="hud-top-left glass-panel">
+    <div class="brand">
+      <span class="brand-star">✦</span>
+      <div>
+        <h1>STARLINK</h1>
+        <p id="brand-subtitle" class="subtitle">3D 知识星空图 · Obsidian 思维星海</p>
+      </div>
+    </div>
+    <div class="sidebar-section-label">平行宇宙 · 滑动切换</div>
+    <nav id="universe-switcher" class="universe-list" aria-label="平行宇宙切换"></nav>
+
+    <div class="search-box">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.3-4.3"></path>
+      </svg>
+      <input id="search-input" type="text" placeholder="搜索知识点 / 关系 (如 SVD, PCA, 谱聚类)..." autocomplete="off" />
+      <button id="clear-search" class="icon-btn hidden" title="清除搜索">✕</button>
+    </div>
+    <div id="cluster-filters" class="cluster-filters"></div>
+  </header>
+
+  <!-- Top-right Controls -->
+  <div class="hud-top-right glass-panel">
+    <button id="btn-guided-tour" class="hud-btn primary" title="AI 导览带看当前宇宙">
+      <span>🧭</span> 带我看
+    </button>
+    <button id="btn-ai-import" class="hud-btn" title="审核导入 AI 整理的笔记或文献宇宙">
+      <span>✨</span> 审核导入
+    </button>
+    <div class="divider-v"></div>
+    <button id="btn-add-node" class="hud-btn" title="添加新知识点星星">
+      <span>＋</span> 点亮新星
+    </button>
+    <button id="btn-add-link" class="hud-btn" title="连接两个知识点">
+      <span>☍</span> 串联星轨
+    </button>
+    <div class="divider-v"></div>
+    <button id="btn-toggle-orbit" class="hud-btn" title="切换自动巡航">
+      <span>◎</span> 巡航
+    </button>
+    <button id="btn-toggle-physics" class="hud-btn" title="切换3D引力物理布局">
+      <span>⚛</span> 引力
+    </button>
+    <button id="btn-toggle-labels" class="hud-btn active" title="显示/隐藏星名标签">
+      <span>Aa</span> 标签
+    </button>
+    <button id="btn-reset-view" class="hud-btn" title="重置星海视角">
+      <span>⌖</span> 复位
+    </button>
+  </div>
+
+  <!-- Bottom-left Stats & Legend -->
+  <div class="hud-bottom-left glass-panel">
+    <div class="stats-row">
+      <span id="stat-nodes">0 颗星</span>
+      <span class="dot">·</span>
+      <span id="stat-edges">0 条星轨</span>
+      <span class="dot">·</span>
+      <span class="hint-text">左键拖拽旋转 · 滚轮缩放 · 右键平移 · 悬停查看 · 点击聚焦</span>
+    </div>
+  </div>
+
+  <!-- Hover Tooltip (follows cursor) -->
+  <div id="hover-tooltip" class="hover-tooltip glass-panel hidden"></div>
+
+  <!-- Right Inspector Drawer (on star click) -->
+  <aside id="inspector-drawer" class="inspector-drawer glass-panel hidden">
+    <div class="drawer-header">
+      <div class="drawer-badge" id="drawer-category">分类</div>
+      <button id="btn-close-drawer" class="icon-btn" title="关闭面板">✕</button>
+    </div>
+    <h2 id="drawer-title">知识点名称</h2>
+    <div id="drawer-en" class="drawer-en">English Name</div>
+    <div id="drawer-formula" class="drawer-formula hidden"></div>
+    <p id="drawer-desc" class="drawer-desc"></p>
+
+    <div class="drawer-section">
+      <h3>核心直觉与要点</h3>
+      <ul id="drawer-points" class="drawer-points"></ul>
+    </div>
+
+    <div class="drawer-section">
+      <h3>星轨连接 (<span id="drawer-links-count">0</span>)</h3>
+      <div id="drawer-links" class="drawer-links"></div>
+    </div>
+  </aside>
+
+  <!-- Guided Tour Bar (bottom-center) -->
+  <div id="tour-bar" class="tour-bar glass-panel hidden">
+    <div class="tour-top">
+      <div class="tour-badge">🧭 导览带看 · <span id="tour-step-counter">1 / 8</span></div>
+      <div class="tour-controls">
+        <button id="tour-prev" class="hud-btn" title="上一站">← 上一步</button>
+        <button id="tour-autoplay" class="hud-btn" title="自动播放导览">▶ 自动</button>
+        <button id="tour-next" class="hud-btn primary" title="下一站">下一步 →</button>
+        <button id="tour-close" class="icon-btn" title="结束导览">✕</button>
+      </div>
+    </div>
+    <div id="tour-node-title" class="tour-node-title">节点名称</div>
+    <div id="tour-narration" class="tour-narration">导览解说内容...</div>
+  </div>
+
+  <!-- Modal: Add Star / Add Link -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal glass-panel">
+      <div class="modal-header">
+        <h3 id="modal-title">点亮新星</h3>
+        <button id="btn-close-modal" class="icon-btn">✕</button>
+      </div>
+      <form id="modal-form" class="modal-form">
+        <!-- Dynamic fields injected by JS -->
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
