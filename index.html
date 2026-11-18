@@ -1,130 +1,258 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-type="software">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>STARLINK · 3D 知识星图</title>
+  <meta name="page-type" content="software" />
+  <meta name="site-kind" content="software" />
+  <title>mind_starmap · 3D 有向知识星图</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
 </head>
 <body>
   <div id="canvas-container"></div>
 
-  <!-- Top-left Brand & Search Bar -->
-  <header class="hud-top-left glass-panel">
-    <div class="brand">
-      <span class="brand-star">✦</span>
-      <div>
-        <h1>STARLINK</h1>
-        <p id="brand-subtitle" class="subtitle">3D 知识星空图 · Obsidian 思维星海</p>
+  <!-- Collapsed Sidebar Expand Pill -->
+  <button id="btn-expand-sidebar" class="sidebar-expand-pill glass-panel hidden" title="展开侧边栏">
+    <span>✦</span>
+    <span>mind_starmap</span>
+    <span class="kbd-hint">»</span>
+  </button>
+
+  <!-- Left Navigation Rail -->
+  <aside id="left-sidebar" class="hud-top-left glass-panel">
+    <div class="brand-row">
+      <div class="brand">
+        <span class="brand-star">✦</span>
+        <div class="brand-text">
+          <h1>mind_starmap</h1>
+          <p id="brand-subtitle" class="subtitle">3D Knowledge Constellation</p>
+        </div>
       </div>
+      <button id="btn-collapse-sidebar" class="icon-btn" title="收起侧边栏">«</button>
     </div>
-    <div class="sidebar-section-label">平行宇宙 · 滑动切换</div>
-    <nav id="universe-switcher" class="universe-list" aria-label="平行宇宙切换"></nav>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">平行宇宙</div>
+      <nav id="universe-switcher" class="universe-list" aria-label="平行宇宙切换"></nav>
+    </div>
 
     <div class="search-box">
       <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="8"></circle>
         <path d="m21 21-4.3-4.3"></path>
       </svg>
-      <input id="search-input" type="text" placeholder="搜索知识点 / 关系 (如 SVD, PCA, 谱聚类)..." autocomplete="off" />
+      <input id="search-input" type="text" placeholder="搜索节点或关系..." autocomplete="off" />
+      <kbd id="search-kbd" class="kbd-hint">/</kbd>
       <button id="clear-search" class="icon-btn hidden" title="清除搜索">✕</button>
     </div>
-    <div id="cluster-filters" class="cluster-filters"></div>
-  </header>
 
-  <!-- Top-right Controls -->
-  <div class="hud-top-right glass-panel">
-    <button id="btn-guided-tour" class="hud-btn primary" title="AI 导览带看当前宇宙">
-      <span>🧭</span> 带我看
-    </button>
-    <button id="btn-ai-import" class="hud-btn" title="审核导入 AI 整理的笔记或文献宇宙">
-      <span>✨</span> 审核导入
-    </button>
-    <div class="divider-v"></div>
-    <button id="btn-add-node" class="hud-btn" title="添加新知识点星星">
-      <span>＋</span> 点亮新星
-    </button>
-    <button id="btn-add-link" class="hud-btn" title="连接两个知识点">
-      <span>☍</span> 串联星轨
-    </button>
-    <div class="divider-v"></div>
-    <button id="btn-toggle-orbit" class="hud-btn" title="切换自动巡航">
-      <span>◎</span> 巡航
-    </button>
-    <button id="btn-toggle-physics" class="hud-btn" title="切换3D引力物理布局">
-      <span>⚛</span> 引力
-    </button>
-    <button id="btn-toggle-labels" class="hud-btn active" title="显示/隐藏星名标签">
-      <span>Aa</span> 标签
-    </button>
-    <button id="btn-reset-view" class="hud-btn" title="重置星海视角">
-      <span>⌖</span> 复位
-    </button>
-  </div>
-
-  <!-- Bottom-left Stats & Legend -->
-  <div class="hud-bottom-left glass-panel">
-    <div class="stats-row">
-      <span id="stat-nodes">0 颗星</span>
-      <span class="dot">·</span>
-      <span id="stat-edges">0 条星轨</span>
-      <span class="dot">·</span>
-      <span class="hint-text">左键拖拽旋转 · 滚轮缩放 · 右键平移 · 悬停查看 · 点击聚焦</span>
-    </div>
-  </div>
-
-  <!-- Hover Tooltip (follows cursor) -->
-  <div id="hover-tooltip" class="hover-tooltip glass-panel hidden"></div>
-
-  <!-- Right Inspector Drawer (on star click) -->
-  <aside id="inspector-drawer" class="inspector-drawer glass-panel hidden">
-    <div class="drawer-header">
-      <div class="drawer-badge" id="drawer-category">分类</div>
-      <button id="btn-close-drawer" class="icon-btn" title="关闭面板">✕</button>
-    </div>
-    <h2 id="drawer-title">知识点名称</h2>
-    <div id="drawer-en" class="drawer-en">English Name</div>
-    <div id="drawer-formula" class="drawer-formula hidden"></div>
-    <p id="drawer-desc" class="drawer-desc"></p>
-
-    <div class="drawer-section">
-      <h3>核心直觉与要点</h3>
-      <ul id="drawer-points" class="drawer-points"></ul>
-    </div>
-
-    <div class="drawer-section">
-      <h3>星轨连接 (<span id="drawer-links-count">0</span>)</h3>
-      <div id="drawer-links" class="drawer-links"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">星域筛选</div>
+      <div id="cluster-filters" class="cluster-filters"></div>
     </div>
   </aside>
 
-  <!-- Guided Tour Bar (bottom-center) -->
+  <!-- Top-Right Segmented Command Dock -->
+  <div class="hud-top-right">
+    <button id="btn-tonight-review" class="tonight-pill glass-panel" type="button" title="点击进入今晚复习导览">
+      <span class="tonight-dot"></span>
+      <span id="tonight-review-text">今晚待点亮 0 颗</span>
+    </button>
+
+    <div class="command-group glass-panel">
+      <button id="btn-guided-tour" class="hud-btn primary" title="AI 导览带看当前宇宙">
+        <span>🧭</span> 带我看
+      </button>
+      <button id="btn-ai-import" class="hud-btn" title="审核导入 AI 整理的笔记或文献宇宙">
+        <span>✨</span> 审核导入
+      </button>
+    </div>
+
+    <div class="command-group glass-panel">
+      <button id="btn-add-node" class="hud-btn" title="添加新知识点星星">
+        <span>＋</span> 新星
+      </button>
+      <button id="btn-add-link" class="hud-btn" title="连接两个知识点">
+        <span>☍</span> 连线
+      </button>
+    </div>
+
+    <div class="command-group glass-panel icon-dock">
+      <button id="btn-toggle-orbit" class="hud-btn icon-only" title="切换自动巡航">◎</button>
+      <button id="btn-toggle-physics" class="hud-btn icon-only" title="切换 3D 引力物理">⚛</button>
+      <button id="btn-toggle-labels" class="hud-btn icon-only active" title="显示/隐藏星名标签">Aa</button>
+      <button id="btn-toggle-bloom" class="hud-btn icon-only active" title="切换泛光特效 (低端设备可关闭)">✧</button>
+      <button id="btn-reset-view" class="hud-btn icon-only" title="重置视角">⌖</button>
+    </div>
+  </div>
+
+  <!-- Active Trace Banner -->
+  <div id="trace-banner" class="trace-banner glass-panel hidden">
+    <span id="trace-banner-text">🔙 前置追溯模式</span>
+    <button id="btn-exit-trace" class="trace-banner-exit" title="退出追溯回到全景 (Esc)">退出 (Esc)</button>
+  </div>
+
+  <!-- Collapsible Edge Relation Legend -->
+  <div id="edge-legend" class="edge-legend glass-panel">
+    <button id="btn-toggle-legend" class="edge-legend-header" type="button" aria-expanded="true">
+      <span>✦ 星轨图例</span>
+      <span class="legend-chevron">▾</span>
+    </button>
+    <div id="edge-legend-body" class="edge-legend-body">
+      <div class="legend-item">
+        <svg class="legend-line" viewBox="0 0 36 10" aria-hidden="true">
+          <defs>
+            <linearGradient id="leg-grad" gradientUnits="userSpaceOnUse" x1="2" y1="5" x2="29" y2="5">
+              <stop offset="0%" stop-color="#e0f2fe" stop-opacity="1" />
+              <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.35" />
+            </linearGradient>
+          </defs>
+          <line x1="2" y1="5" x2="29" y2="5" stroke="url(#leg-grad)" stroke-width="2" />
+          <polygon points="29,2 35,5 29,8" fill="#7dd3fc" />
+        </svg>
+        <span class="legend-label">推导 / 导出（实线流光）</span>
+      </div>
+      <div class="legend-item">
+        <svg class="legend-line" viewBox="0 0 36 10" aria-hidden="true">
+          <line x1="2" y1="5" x2="29" y2="5" stroke="#a78bfa" stroke-width="1.8" stroke-dasharray="5 3" />
+          <polygon points="29,2.5 34,5 29,7.5" fill="#c4b5fd" />
+        </svg>
+        <span class="legend-label">前置 / 依赖（虚线）</span>
+      </div>
+      <div class="legend-item">
+        <svg class="legend-line" viewBox="0 0 36 10" aria-hidden="true">
+          <line x1="2" y1="3" x2="29" y2="3" stroke="#34d399" stroke-width="1.4" />
+          <line x1="2" y1="7" x2="29" y2="7" stroke="#34d399" stroke-width="1.4" />
+          <polygon points="29,2.5 34,5 29,7.5" fill="#6ee7b7" />
+        </svg>
+        <span class="legend-label">特例 / 推广（平行双线）</span>
+      </div>
+      <div class="legend-item">
+        <svg class="legend-line" viewBox="0 0 36 10" aria-hidden="true">
+          <line x1="2" y1="5" x2="29" y2="5" stroke="#fbbf24" stroke-width="2" stroke-dasharray="1.5 3" stroke-linecap="round" />
+          <polygon points="29,2.5 34,5 29,7.5" fill="#fde68a" />
+        </svg>
+        <span class="legend-label">对比 / 类比（点线）</span>
+      </div>
+      <div class="legend-foot">亮端 → 暗端 · 流光粒子 → 发光锥</div>
+    </div>
+  </div>
+
+  <!-- Bottom-left Minimal Status Pill -->
+  <div id="hud-bottom-left" class="hud-bottom-left glass-panel">
+    <div class="stats-row">
+      <span id="stat-nodes" class="stat-mono">0 颗星</span>
+      <span class="dot">·</span>
+      <span id="stat-edges" class="stat-mono">0 条星轨</span>
+      <span class="dot hint-sep">·</span>
+      <span class="hint-text">拖拽旋转 · 滚轮缩放 · 点击聚焦 · <kbd>/</kbd> 搜索 · <kbd>Esc</kbd> 关闭</span>
+      <button id="btn-toggle-hints" class="hint-toggle-btn" type="button" title="显示/隐藏快捷键提示" aria-expanded="true">⌨</button>
+    </div>
+  </div>
+
+  <!-- Hover Tooltip -->
+  <div id="hover-tooltip" class="hover-tooltip glass-panel hidden"></div>
+
+  <!-- Right Studio Inspector Drawer -->
+  <aside id="inspector-drawer" class="inspector-drawer glass-panel hidden">
+    <div class="drawer-header">
+      <div class="drawer-badge" id="drawer-category">分类</div>
+      <div class="drawer-header-actions">
+        <button id="btn-expand-drawer" class="icon-btn" title="展开/收起宽屏阅读">⤢</button>
+        <button id="btn-close-drawer" class="icon-btn" title="关闭面板 (Esc)">✕</button>
+      </div>
+    </div>
+
+    <div class="drawer-title-block">
+      <h2 id="drawer-title">知识点名称</h2>
+      <div id="drawer-en" class="drawer-en">English Name</div>
+    </div>
+
+    <div id="drawer-mastery-bar" class="drawer-mastery-bar"></div>
+
+    <div id="drawer-trace-actions" class="drawer-trace-actions">
+      <button id="btn-trace-upstream" class="trace-btn" type="button" title="BFS 追溯所有前置知识并按拓扑排序">🔙 追溯前置</button>
+      <button id="btn-trace-downstream" class="trace-btn" type="button" title="查看由此推导出的后续知识链">🔜 查看后续</button>
+    </div>
+
+    <div id="drawer-trace-panel" class="drawer-trace-panel hidden"></div>
+
+    <div class="drawer-tabs" role="tablist">
+      <button class="drawer-tab active" data-tab="graph" role="tab">✦ 知识图谱</button>
+      <button class="drawer-tab" data-tab="source" role="tab">📄 原文溯源</button>
+    </div>
+
+    <!-- Tab 1: Knowledge Graph Details -->
+    <div id="drawer-tab-graph" class="drawer-tab-panel">
+      <div id="drawer-formula" class="drawer-formula hidden"></div>
+      <p id="drawer-desc" class="drawer-desc"></p>
+
+      <div id="drawer-provenance-pill" class="provenance-pill hidden" title="点击切换到原文溯源">
+        <span class="provenance-icon">📄</span>
+        <span id="drawer-provenance-path" class="provenance-path"></span>
+        <span class="provenance-action">查看原文 →</span>
+      </div>
+
+      <div class="drawer-section">
+        <h3>核心直觉与要点</h3>
+        <ul id="drawer-points" class="drawer-points"></ul>
+      </div>
+
+      <div class="drawer-section">
+        <h3>星轨连接 (<span id="drawer-links-count">0</span>)</h3>
+        <div id="drawer-links" class="drawer-links"></div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Original Source Viewer -->
+    <div id="drawer-tab-source" class="drawer-tab-panel hidden">
+      <div id="source-meta-card" class="source-meta-card">
+        <div class="source-meta-label">原始出处路径</div>
+        <div id="source-file-path" class="source-file-path">暂无溯源信息</div>
+        <div id="source-section-tag" class="source-section-tag hidden"></div>
+      </div>
+
+      <div id="source-excerpt-block" class="source-excerpt-block hidden">
+        <div class="source-block-title">核心原文摘录</div>
+        <pre id="source-excerpt-text" class="source-excerpt-text"></pre>
+      </div>
+
+      <div id="source-full-block" class="source-full-block">
+        <div class="source-block-title">完整原文内容</div>
+        <div id="source-markdown-body" class="source-markdown-body"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Cinematic Guided Tour Bar -->
   <div id="tour-bar" class="tour-bar glass-panel hidden">
+    <div id="tour-progress-track" class="tour-progress-track">
+      <div id="tour-progress-fill" class="tour-progress-fill"></div>
+    </div>
     <div class="tour-top">
       <div class="tour-badge">🧭 导览带看 · <span id="tour-step-counter">1 / 8</span></div>
       <div class="tour-controls">
-        <button id="tour-prev" class="hud-btn" title="上一站">← 上一步</button>
-        <button id="tour-autoplay" class="hud-btn" title="自动播放导览">▶ 自动</button>
-        <button id="tour-next" class="hud-btn primary" title="下一站">下一步 →</button>
+        <button id="tour-prev" class="hud-btn" title="上一站">← 上一站</button>
+        <button id="tour-autoplay" class="hud-btn" title="播放 / 暂停 (空格)">⏸ 暂停</button>
+        <button id="tour-next" class="hud-btn primary" title="下一站">下一站 →</button>
         <button id="tour-close" class="icon-btn" title="结束导览">✕</button>
       </div>
     </div>
+    <div id="tour-transition-reason" class="tour-transition-reason hidden"></div>
     <div id="tour-node-title" class="tour-node-title">节点名称</div>
     <div id="tour-narration" class="tour-narration">导览解说内容...</div>
   </div>
 
-  <!-- Modal: Add Star / Add Link -->
+  <!-- Modal -->
   <div id="modal-overlay" class="modal-overlay hidden">
     <div class="modal glass-panel">
       <div class="modal-header">
         <h3 id="modal-title">点亮新星</h3>
         <button id="btn-close-modal" class="icon-btn">✕</button>
       </div>
-      <form id="modal-form" class="modal-form">
-        <!-- Dynamic fields injected by JS -->
-      </form>
+      <form id="modal-form" class="modal-form"></form>
     </div>
   </div>
 

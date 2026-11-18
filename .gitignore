@@ -3,3 +3,8 @@ dist/
 .DS_Store
 *.log
 .vite/
+/.agent/skills/taste-skill/
+/public/universes/manifest.local.json
+/public/universes/local/
+/public/universes/course_checklist/
+/public/universes/learning_note/

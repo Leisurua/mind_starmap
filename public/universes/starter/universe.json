@@ -1,0 +1,35 @@
+{
+  "id": "starter",
+  "name": "我的知识星海",
+  "shortName": "默认宇宙",
+  "icon": "✦",
+  "subtitle": "3D Knowledge Constellation · Folder-Driven Universe",
+  "categories": {
+    "core": {
+      "id": "core",
+      "name": "核心概念",
+      "en": "Core Concepts",
+      "color": "#38bdf8"
+    }
+  },
+  "anchors": {
+    "core": [0, 0, 0]
+  },
+  "nodes": [
+    {
+      "id": "welcome_star",
+      "name": "初始星核",
+      "en": "Starter Star",
+      "category": "core",
+      "formula": "\\text{Folder } A + \\text{Folder } B \\longrightarrow \\text{Parallel Universes}",
+      "summary": "这是一个按文件夹解耦的起点星核。每个平行宇宙只需在 public/universes/<id>/universe.json 放置纯数据，即可共用同一套 3D 星图引擎。",
+      "points": [
+        "边学边记：将学习笔记交给 AI 用 starlink-constellation Skill 整理，审核后一键合入。",
+        "扩展新宇宙：在 public/universes/ 下新建文件夹放入 universe.json 并在 manifest.json 注册即可。"
+      ]
+    }
+  ],
+  "links": [],
+  "wormholes": [],
+  "tour": []
+}

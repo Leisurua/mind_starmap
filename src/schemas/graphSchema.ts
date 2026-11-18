@@ -13,6 +13,13 @@ export const CategorySchema = z.object({
   color: z.string().regex(HEX_COLOR_RE, '星域颜色必须是有效的十六进制色值 (如 #38bdf8)'),
 });
 
+export const SourceProvenanceSchema = z.object({
+  file: z.string().min(1),
+  section: z.string().optional().default(''),
+  excerpt: z.string().optional().default(''),
+  url: z.string().optional().default(''),
+});
+
 export const StarNodeSchema = z.object({
   id: idSchema,
   name: z.string().min(1, '节点名称 name 不能为空'),
@@ -21,6 +28,7 @@ export const StarNodeSchema = z.object({
   formula: z.string().optional().default(''),
   summary: z.string().min(1, '节点简介 summary 不能为空'),
   points: z.array(z.string()).optional().default([]),
+  source: SourceProvenanceSchema.optional(),
 });
 
 export const DirectedLinkSchema = z.object({
